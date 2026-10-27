@@ -12,6 +12,7 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
+  Clock3,
   FileSpreadsheet,
   Headset,
   LayoutDashboard,
@@ -82,6 +83,16 @@ import {
   type UserProfile,
   type UserRole,
 } from "./types";
+
+type HandoffAlert = {
+  id: string;
+  providerName: string;
+  endTime: string;
+  remainingMinutes: number;
+  nextCollaboratorName?: string;
+  nextServiceDate?: string;
+  nextStartTime?: string;
+};
 
 type View =
   | "Dashboard"
@@ -313,6 +324,8 @@ function App() {
   const [archivedTickets, setArchivedTickets] = useState<Ticket[]>([]);
   const [archivedSales, setArchivedSales] = useState<Sale[]>([]);
   const [actuations, setActuations] = useState<Actuation[]>(() => isFirebaseConfigured ? [] : demoActuations);
+  const [scheduledActuations, setScheduledActuations] = useState<Actuation[]>(() => isFirebaseConfigured ? [] : demoActuations);
+  const [handoffAlerts, setHandoffAlerts] = useState<HandoffAlert[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -343,6 +356,8 @@ function App() {
     setArchivedClosings([]);
     setArchivedTickets([]);
     setArchivedSales([]);
+    setScheduledActuations([]);
+    setHandoffAlerts([]);
     if (!isAdmin) setUsers([]);
     try {
       let providerRows: Provider[] = [];
@@ -577,6 +592,73 @@ function App() {
       (error) => setNotice(`Falha ao atualizar suas atuações: ${firebaseError(error)}`),
     );
   }, [profile?.uid, profile?.role]);
+
+  useEffect(() => {
+    if (profile?.role !== "collaborator" || !db) return;
+    const today = localDateString(new Date());
+    const future = new Date();
+    future.setDate(future.getDate() + 60);
+    const throughDate = localDateString(future);
+    return onSnapshot(
+      query(
+        collection(db, "actuations"),
+        where("serviceDate", ">=", today),
+        where("serviceDate", "<=", throughDate),
+        orderBy("serviceDate"),
+        limit(500),
+      ),
+      (snapshot) => setScheduledActuations(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as Actuation)),
+      (error) => setNotice(`Falha ao carregar as próximas responsabilidades: ${firebaseError(error)}`),
+    );
+  }, [profile?.uid, profile?.role]);
+
+  useEffect(() => {
+    if (profile?.role !== "collaborator") {
+      setHandoffAlerts([]);
+      return;
+    }
+    const collaboratorUid = profile.uid;
+
+    function updateHandoffAlerts() {
+      const now = new Date();
+      const today = localDateString(now);
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const upcoming = scheduledActuations
+        .filter((actuation) => actuation.serviceDate >= today)
+        .sort((a, b) => `${a.serviceDate}T${a.startTime}`.localeCompare(`${b.serviceDate}T${b.startTime}`));
+      const alerts = upcoming.flatMap((actuation) => {
+        if (actuation.collaboratorId !== collaboratorUid || actuation.serviceDate !== today) return [];
+        const [endHour, endMinute] = actuation.endTime.split(":").map(Number);
+        const [startHour, startMinute] = actuation.startTime.split(":").map(Number);
+        const endMinutes = endHour * 60 + endMinute;
+        const startMinutes = startHour * 60 + startMinute;
+        const minutesRemaining = endMinutes - currentMinutes;
+        if (currentMinutes < startMinutes || minutesRemaining <= 0 || minutesRemaining > 15) return [];
+
+        const nextResponsibility = upcoming.find((candidate) =>
+          candidate.providerId === actuation.providerId &&
+          candidate.id !== actuation.id &&
+          `${candidate.serviceDate}T${candidate.startTime}` >= `${actuation.serviceDate}T${actuation.endTime}`,
+        );
+        return [{
+          id: actuation.id,
+          providerName: actuation.providerName,
+          endTime: actuation.endTime,
+          remainingMinutes: minutesRemaining,
+          ...(nextResponsibility ? {
+            nextCollaboratorName: nextResponsibility.collaboratorName,
+            nextServiceDate: nextResponsibility.serviceDate,
+            nextStartTime: nextResponsibility.startTime,
+          } : {}),
+        } satisfies HandoffAlert];
+      });
+      setHandoffAlerts(alerts);
+    }
+
+    updateHandoffAlerts();
+    const interval = window.setInterval(updateHandoffAlerts, 30_000);
+    return () => window.clearInterval(interval);
+  }, [profile?.uid, profile?.role, scheduledActuations]);
 
   useEffect(() => {
     if (profile?.role !== "collaborator" || profile.isPaused || !db) return;
@@ -865,7 +947,7 @@ function App() {
           {notice && <div className="notice global-notice">{notice}<button onClick={() => setNotice("")}><X size={15} /></button></div>}
           <PageHeading view={view} profile={profile} onRefresh={loadData} />
           {busy && <div className="sync-label"><span className="loader tiny" /> Sincronizando dados...</div>}
-          {view === "Dashboard" && <Dashboard tickets={tickets} historicalTickets={[...tickets, ...archivedTickets]} providers={providers} users={users} sales={sales} actuations={actuations} providerComments={providerComments} profile={profile} onTogglePause={togglePause} pauseBusy={pauseBusy} />}
+          {view === "Dashboard" && <Dashboard tickets={tickets} historicalTickets={[...tickets, ...archivedTickets]} providers={providers} users={users} sales={sales} actuations={actuations} handoffAlerts={handoffAlerts} providerComments={providerComments} profile={profile} onTogglePause={togglePause} pauseBusy={pauseBusy} />}
           {view === "Chamados" && <Calls tickets={tickets} subjects={subjects} providers={providers} users={users} profile={profile} demoMode={demoMode} onDemoCreate={addDemoTicket} onAddComment={addProviderComment} onReload={loadData} setNotice={setNotice} />}
           {view === "Registro em Massa" && isCollaborator && <MassTicketRegistration providers={providers} profile={profile} demoMode={demoMode} onDemoCreate={addDemoTicket} onReload={loadData} setNotice={setNotice} />}
           {view === "Pré Fechamento" && profile.role === "provider" && <Closing tickets={tickets} providers={providers} sales={sales} profile={profile} archivedClosings={archivedClosings} onArchive={archiveClosing} />}
@@ -933,7 +1015,7 @@ function PageHeading({ view, profile, onRefresh }: { view: View; profile: UserPr
   );
 }
 
-function Dashboard({ tickets, historicalTickets, providers, users, sales, actuations, providerComments, profile, onTogglePause, pauseBusy }: { tickets: Ticket[]; historicalTickets: Ticket[]; providers: Provider[]; users: UserProfile[]; sales: Sale[]; actuations: Actuation[]; providerComments: ProviderComment[]; profile: UserProfile; onTogglePause: () => Promise<void>; pauseBusy: boolean }) {
+function Dashboard({ tickets, historicalTickets, providers, users, sales, actuations, handoffAlerts, providerComments, profile, onTogglePause, pauseBusy }: { tickets: Ticket[]; historicalTickets: Ticket[]; providers: Provider[]; users: UserProfile[]; sales: Sale[]; actuations: Actuation[]; handoffAlerts: HandoffAlert[]; providerComments: ProviderComment[]; profile: UserProfile; onTogglePause: () => Promise<void>; pauseBusy: boolean }) {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const monthTickets = historicalTickets.filter((ticket) => (ticket.createdAt?.toDate() ?? new Date(0)) >= monthStart);
   const isAdmin = profile.role === "admin";
@@ -944,7 +1026,7 @@ function Dashboard({ tickets, historicalTickets, providers, users, sales, actuat
       : <EmptyState icon={Building2} title="Provedor não encontrado" text="Esta conta não está vinculada a um provedor disponível." />;
   }
   if (profile.role === "collaborator") {
-    return <CollaboratorDashboard profile={profile} actuations={actuations} onTogglePause={onTogglePause} pauseBusy={pauseBusy} />;
+    return <CollaboratorDashboard profile={profile} actuations={actuations} handoffAlerts={handoffAlerts} onTogglePause={onTogglePause} pauseBusy={pauseBusy} />;
   }
   const now = new Date();
   const recentMonths = Array.from({ length: 6 }, (_, index) => {
@@ -1005,7 +1087,7 @@ function Dashboard({ tickets, historicalTickets, providers, users, sales, actuat
   );
 }
 
-function CollaboratorDashboard({ profile, actuations, onTogglePause, pauseBusy }: { profile: UserProfile; actuations: Actuation[]; onTogglePause: () => Promise<void>; pauseBusy: boolean }) {
+function CollaboratorDashboard({ profile, actuations, handoffAlerts, onTogglePause, pauseBusy }: { profile: UserProfile; actuations: Actuation[]; handoffAlerts: HandoffAlert[]; onTogglePause: () => Promise<void>; pauseBusy: boolean }) {
   const agendaRows = [{ id: profile.uid, name: profile.name }];
   return (
     <>
@@ -1013,6 +1095,13 @@ function CollaboratorDashboard({ profile, actuations, onTogglePause, pauseBusy }
         <div className="status-indicator"><i /><span>{profile.isPaused ? "Você está em pausa" : "Você está ativo"}</span><small>{profile.isPaused ? "Seus colegas foram avisados. Retome quando estiver disponível." : "Você está disponível para registrar e acompanhar chamados."}</small></div>
         <button className={`button ${profile.isPaused ? "primary" : "outline"} status-toggle`} disabled={pauseBusy} onClick={() => void onTogglePause()}>{profile.isPaused ? <><Play size={15} /> Voltar à atividade</> : <><Pause size={15} /> Entrar em pausa</>}</button>
       </section>
+      {handoffAlerts.length > 0 && <section className="handoff-alert-panel" role="alert">
+        <div className="handoff-alert-heading"><Clock3 size={18} /><div><b>Encerramento próximo</b><span>Confira a troca de responsável pelos provedores.</span></div></div>
+        <div className="handoff-alert-list">{handoffAlerts.map((alert) => <article className="handoff-alert-item" key={alert.id}>
+          <div><b>{alert.providerName}</b><small>Sua atuação termina às {alert.endTime} · faltam {alert.remainingMinutes} min</small></div>
+          <div className="handoff-next-person"><span>Próximo responsável</span><b>{alert.nextCollaboratorName ?? "Nenhum colaborador agendado nos próximos 60 dias"}</b>{alert.nextStartTime && alert.nextServiceDate && <small>{alert.nextServiceDate === localDateString(new Date()) ? "Hoje" : dateOnly(new Date(`${alert.nextServiceDate}T12:00:00`))} às {alert.nextStartTime}</small>}</div>
+        </article>)}</div>
+      </section>}
       <section className="panel table-panel collaborator-actuations"><div className="panel-heading"><div><h2>Sua agenda de hoje</h2><p>Provedores e horários programados para você</p></div><span className="panel-period"><CalendarDays size={14} /> {dateOnly(new Date())}</span></div>
         {actuations.length
           ? <ScheduleAgenda rows={agendaRows} actuations={actuations} />

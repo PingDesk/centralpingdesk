@@ -279,6 +279,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .schedule-event-actions .row-action { width: 23px; height: 23px; background: #0b1822; }
 .collaborator-actuations { margin-top: 16px; }
 .collaborator-actuations .schedule-agenda-scroll { max-height: 500px; }
+.handoff-alert-panel { padding: 14px 16px; margin: 14px 0; border: 1px solid rgba(255, 184, 77, .35); border-radius: 10px; color: #f0dfc1; background: linear-gradient(110deg, rgba(255, 184, 77, .11), rgba(17, 26, 34, .96)); box-shadow: 0 8px 26px rgba(0, 0, 0, .14); }
+.handoff-alert-heading { display: flex; align-items: center; gap: 10px; color: var(--amber); }
+.handoff-alert-heading > svg { flex: 0 0 auto; }
+.handoff-alert-heading b, .handoff-alert-heading span { display: block; }
+.handoff-alert-heading b { color: #ffe0aa; font: 600 13px "Space Grotesk", sans-serif; }
+.handoff-alert-heading span { margin-top: 3px; color: #a9987c; font-size: 9px; }
+.handoff-alert-list { margin-top: 9px; display: grid; }
+.handoff-alert-item { min-height: 58px; padding: 9px 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid rgba(255, 184, 77, .15); }
+.handoff-alert-item > div { min-width: 0; }
+.handoff-alert-item b, .handoff-alert-item small, .handoff-next-person span { display: block; }
+.handoff-alert-item > div:first-child b { color: #f1e8d8; font-size: 11px; }
+.handoff-alert-item small { margin-top: 3px; color: #a6957e; font-size: 9px; }
+.handoff-next-person { text-align: right; }
+.handoff-next-person span { color: #a9987c; font-size: 8px; text-transform: uppercase; letter-spacing: .5px; }
+.handoff-next-person b { margin-top: 3px; color: #ffe0aa; font-size: 10px; }
 .filter-search { min-width: 180px; height: 38px; flex: 1; padding: 0 10px; display: flex; align-items: center; gap: 8px; border: 1px solid #203145; border-radius: 8px; background: #08111b; color: #758ba0; }
 .filter-search input { width: 100%; height: 100%; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 11px; }
 .filter-search:focus-within { border-color: rgba(34, 200, 232, .55); }
@@ -483,6 +498,8 @@ code { color: #a8e8f0; font-family: "DM Mono", monospace; font-size: .92em; }
   .mass-protocol-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
   .mass-registration-footer { align-items: stretch; flex-direction: column; }
   .mass-registration-footer .button { width: 100%; }
+  .handoff-alert-item { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .handoff-next-person { text-align: left; }
   .form-grid { grid-template-columns: 1fr; }
   .field-span, .modal-actions { grid-column: 1; }
   .modal-backdrop { padding: 10px; }

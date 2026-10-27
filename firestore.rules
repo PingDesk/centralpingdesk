@@ -225,8 +225,7 @@ service cloud.firestore {
 
     match /actuations/{actuationId} {
       allow read: if isAdmin() ||
-        (signedIn() && profile().role == 'collaborator' &&
-         resource.data.collaboratorId == request.auth.uid);
+        (signedIn() && profile().role == 'collaborator');
       allow create: if isAdmin() &&
         validActuation(request.resource.data) &&
         request.resource.data.createdAt == request.time &&
