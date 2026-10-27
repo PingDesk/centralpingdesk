@@ -973,8 +973,7 @@ function Dashboard({ tickets, historicalTickets, providers, users, sales, actuat
   const onlineUsers = users.filter(isPresenceOnline);
   const teamRoster = users
     .filter((item) => item.role === "collaborator")
-    .sort((a, b) => Number(isPresenceOnline(b)) - Number(isPresenceOnline(a)))
-    .slice(0, 5);
+    .sort((a, b) => Number(isPresenceOnline(b)) - Number(isPresenceOnline(a)) || a.name.localeCompare(b.name, "pt-BR"));
   const estimates = providers.map((provider) => {
     const report = calculateClosing(provider, tickets, sales);
     return report.total;
