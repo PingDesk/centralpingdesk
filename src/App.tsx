@@ -12,7 +12,6 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
-  Clock3,
   FileSpreadsheet,
   Headset,
   LayoutDashboard,
@@ -1007,14 +1006,17 @@ function Dashboard({ tickets, historicalTickets, providers, users, sales, actuat
 }
 
 function CollaboratorDashboard({ profile, actuations, onTogglePause, pauseBusy }: { profile: UserProfile; actuations: Actuation[]; onTogglePause: () => Promise<void>; pauseBusy: boolean }) {
+  const agendaRows = [{ id: profile.uid, name: profile.name }];
   return (
     <>
       <section className={`collaborator-status collaborator-dashboard ${profile.isPaused ? "is-paused" : ""}`}>
         <div className="status-indicator"><i /><span>{profile.isPaused ? "Você está em pausa" : "Você está ativo"}</span><small>{profile.isPaused ? "Seus colegas foram avisados. Retome quando estiver disponível." : "Você está disponível para registrar e acompanhar chamados."}</small></div>
         <button className={`button ${profile.isPaused ? "primary" : "outline"} status-toggle`} disabled={pauseBusy} onClick={() => void onTogglePause()}>{profile.isPaused ? <><Play size={15} /> Voltar à atividade</> : <><Pause size={15} /> Entrar em pausa</>}</button>
       </section>
-      <section className="panel table-panel collaborator-actuations"><div className="panel-heading"><div><h2>Suas atuações de hoje</h2><p>Provedores e horários programados para você</p></div><span className="panel-period"><CalendarDays size={14} /> {dateOnly(new Date())}</span></div>
-        {actuations.length ? <div className="today-actuation-list">{actuations.slice().sort((a, b) => a.startTime.localeCompare(b.startTime)).map((actuation) => <div className="today-actuation" key={actuation.id}><span className="actuation-clock"><Clock3 size={17} /></span><span className="today-actuation-provider"><b>{actuation.providerName}</b><small>Provedor do turno</small></span><span className="today-actuation-hours">{actuation.startTime} – {actuation.endTime}</span></div>)}</div> : <EmptyState icon={CalendarClock} title="Nenhuma atuação programada" text="Quando houver um turno atribuído a você, o provedor e o horário aparecerão aqui." />}
+      <section className="panel table-panel collaborator-actuations"><div className="panel-heading"><div><h2>Sua agenda de hoje</h2><p>Provedores e horários programados para você</p></div><span className="panel-period"><CalendarDays size={14} /> {dateOnly(new Date())}</span></div>
+        {actuations.length
+          ? <ScheduleAgenda rows={agendaRows} actuations={actuations} />
+          : <EmptyState icon={CalendarClock} title="Nenhuma atuação programada" text="Quando houver um turno atribuído a você, o provedor e o horário aparecerão na agenda." />}
       </section>
     </>
   );
@@ -1424,27 +1426,102 @@ function SubjectDialog({ subject, providers, demoMode, onDemoSave, onClose, onSa
 
 function Actuations({ actuations, providers, users, demoMode, onDemoChange, onReload, setNotice }: { actuations: Actuation[]; providers: Provider[]; users: UserProfile[]; demoMode: boolean; onDemoChange: (actuations: Actuation[]) => void; onReload: () => Promise<void>; setNotice: (value: string) => void }) {
   const [dateFilter, setDateFilter] = useState(localDateString(new Date()));
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Actuation | null>(null);
   const [deleting, setDeleting] = useState<Actuation | null>(null);
+  const [assignmentDraft, setAssignmentDraft] = useState<{ providerId: string; collaboratorId: string } | null>(null);
   const shown = actuations.filter((actuation) => actuation.serviceDate === dateFilter)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
   const collaborators = users.filter((item) => item.role === "collaborator");
+  function scheduleProvider(providerId: string, collaboratorId: string) {
+    setEditing(null);
+    setAssignmentDraft({ providerId, collaboratorId });
+  }
 
   return <>
-    <section className="panel filters-panel actuation-controls"><label>Data dos turnos<input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} /></label><span className="actuation-count">{shown.length} {shown.length === 1 ? "atuação" : "atuações"}</span><button className="button primary" disabled={!providers.length || !collaborators.length} onClick={() => setCreating(true)}><Plus size={16} /> Nova atuação</button></section>
-    <section className="panel table-panel"><div className="panel-heading"><div><h2>Escala de atendimento</h2><p>Programe cada turno por provedor, colaborador e horário</p></div></div>
-      {shown.length ? <div className="table-scroll"><table><thead><tr><th>PROVEDOR</th><th>COLABORADOR RESPONSÁVEL</th><th>DATA</th><th>INÍCIO</th><th>FIM</th><th>AÇÕES</th></tr></thead><tbody>{shown.map((actuation) => <tr key={actuation.id}><td><b>{actuation.providerName}</b></td><td>{actuation.collaboratorName}</td><td>{dateOnly(new Date(`${actuation.serviceDate}T12:00:00`))}</td><td><span className="protocol">{actuation.startTime}</span></td><td><span className="protocol">{actuation.endTime}</span></td><td><div className="row-actions"><button className="icon-button row-action" aria-label="Editar atuação" onClick={() => setEditing(actuation)}><Pencil size={15} /></button><button className="icon-button row-action danger-action" aria-label="Excluir atuação" onClick={() => setDeleting(actuation)}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState icon={CalendarClock} title="Nenhuma atuação nesta data" text="Adicione um turno para direcionar um colaborador ao atendimento de um provedor." />}
+    <section className="panel actuation-planner">
+      <div className="panel-heading"><div><h2>Escala de atendimento</h2><p>Arraste um provedor até o colaborador e informe o período do atendimento.</p></div><span className="record-count">{shown.length} {shown.length === 1 ? "turno" : "turnos"}</span></div>
+      <div className="actuation-planner-controls"><label>Data da agenda<input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} /></label><button className="button primary" disabled={!providers.length || !collaborators.length} onClick={() => scheduleProvider(providers[0]?.id ?? "", collaborators[0]?.uid ?? "")}><Plus size={16} /> Nova atuação</button></div>
+      <div className="provider-drag-shelf"><div className="provider-drag-heading"><b>Provedores</b><span>Arraste para a agenda de um colaborador</span></div><div className="provider-drag-list">{providers.map((provider) => <button key={provider.id} type="button" className="provider-drag-card" draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", provider.id); event.dataTransfer.effectAllowed = "copy"; }} onClick={() => scheduleProvider(provider.id, collaborators[0]?.uid ?? "")} title="Arraste até um colaborador ou clique para programar"><Building2 size={15} /><span>{provider.name}</span><Plus size={14} /></button>)}</div></div>
+      {collaborators.length
+        ? <ScheduleAgenda rows={collaborators.map((item) => ({ id: item.uid, name: item.name }))} actuations={shown} onProviderDrop={scheduleProvider} onEdit={setEditing} onDelete={setDeleting} />
+        : <EmptyState icon={Users} title="Nenhum colaborador cadastrado" text="Cadastre um acesso de colaborador para montar a agenda de atendimento." />}
     </section>
-    {(creating || editing) && <ActuationDialog actuation={editing} providers={providers} collaborators={collaborators} demoMode={demoMode} onClose={() => { setCreating(false); setEditing(null); }} onSaved={async (saved) => { setCreating(false); setEditing(null); if (demoMode) onDemoChange([...actuations.filter((item) => item.id !== saved.id), saved]); await onReload(); }} setNotice={setNotice} />}
+    {(assignmentDraft || editing) && <ActuationDialog key={editing?.id ?? `${assignmentDraft?.providerId}-${assignmentDraft?.collaboratorId}`} actuation={editing} providers={providers} collaborators={collaborators} demoMode={demoMode} initialProviderId={assignmentDraft?.providerId} initialCollaboratorId={assignmentDraft?.collaboratorId} initialServiceDate={dateFilter} onClose={() => { setAssignmentDraft(null); setEditing(null); }} onSaved={async (saved) => { setAssignmentDraft(null); setEditing(null); if (demoMode) onDemoChange([...actuations.filter((item) => item.id !== saved.id), saved]); await onReload(); }} setNotice={setNotice} />}
     {deleting && <ConfirmDialog title="Excluir atuação?" text={`${deleting.collaboratorName} deixará de ver o turno de ${deleting.providerName} em ${dateOnly(new Date(`${deleting.serviceDate}T12:00:00`))}.`} onCancel={() => setDeleting(null)} onConfirm={async () => { try { if (demoMode) onDemoChange(actuations.filter((item) => item.id !== deleting.id)); else { if (!db) throw new Error("Firestore não está configurado."); await deleteDoc(doc(db, "actuations", deleting.id)); } setNotice("Atuação excluída."); setDeleting(null); await onReload(); } catch (error) { setNotice(`Erro ao excluir atuação: ${firebaseError(error)}`); } }} />}
   </>;
 }
 
-function ActuationDialog({ actuation, providers, collaborators, demoMode, onClose, onSaved, setNotice }: { actuation: Actuation | null; providers: Provider[]; collaborators: UserProfile[]; demoMode: boolean; onClose: () => void; onSaved: (actuation: Actuation) => Promise<void>; setNotice: (value: string) => void }) {
-  const [providerId, setProviderId] = useState(actuation?.providerId ?? providers[0]?.id ?? "");
-  const [collaboratorId, setCollaboratorId] = useState(actuation?.collaboratorId ?? collaborators[0]?.uid ?? "");
-  const [serviceDate, setServiceDate] = useState(actuation?.serviceDate ?? localDateString(new Date()));
+type ScheduleRow = { id: string; name: string };
+
+function ScheduleAgenda({ rows, actuations, onProviderDrop, onEdit, onDelete }: { rows: ScheduleRow[]; actuations: Actuation[]; onProviderDrop?: (providerId: string, collaboratorId: string) => void; onEdit?: (actuation: Actuation) => void; onDelete?: (actuation: Actuation) => void }) {
+  const hourHeight = 52;
+  const agendaHeight = hourHeight * 24;
+  const hours = Array.from({ length: 24 }, (_, hour) => hour);
+
+  function minutes(value: string) {
+    const [hour, minute] = value.split(":").map(Number);
+    return hour * 60 + minute;
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>, collaboratorId: string) {
+    if (!onProviderDrop) return;
+    event.preventDefault();
+    const providerId = event.dataTransfer.getData("text/plain");
+    if (providerId) onProviderDrop(providerId, collaboratorId);
+  }
+
+  return <div className="schedule-agenda-scroll">
+    <div className="schedule-agenda" style={{ minWidth: `${72 + rows.length * 230}px` }}>
+      <div className="schedule-agenda-header" style={{ gridTemplateColumns: `58px repeat(${rows.length}, minmax(220px, 1fr))` }}><div className="schedule-time-heading">HORÁRIO</div>{rows.map((row) => <div className="schedule-collaborator-heading" key={row.id}><span className="avatar">{initials(row.name)}</span><b>{row.name}</b></div>)}</div>
+      <div className="schedule-agenda-body" style={{ gridTemplateColumns: `58px repeat(${rows.length}, minmax(220px, 1fr))` }}>
+        <div className="schedule-time-axis" style={{ height: agendaHeight }}>{hours.map((hour) => <div className="schedule-hour-label" style={{ top: hour * hourHeight }} key={hour}>{String(hour).padStart(2, "0")}:00</div>)}</div>
+        {rows.map((row) => {
+          const rowActuations = actuations.filter((actuation) => actuation.collaboratorId === row.id)
+            .slice().sort((a, b) => a.startTime.localeCompare(b.startTime));
+          const lanes: number[] = [];
+          const positions = rowActuations.map((actuation) => {
+            const start = minutes(actuation.startTime);
+            const end = minutes(actuation.endTime);
+            let lane = lanes.findIndex((laneEnd) => laneEnd <= start);
+            if (lane < 0) lane = lanes.length;
+            lanes[lane] = end;
+            return { actuation, start, end, lane, laneCount: 0 };
+          });
+          positions.forEach((position) => { position.laneCount = lanes.length; });
+
+          return <div className={`schedule-collaborator-lane ${onProviderDrop ? "schedule-drop-target" : ""}`} key={row.id} style={{ height: agendaHeight }} onDragOver={onProviderDrop ? (event) => event.preventDefault() : undefined} onDrop={onProviderDrop ? (event) => handleDrop(event, row.id) : undefined}>
+            {hours.map((hour) => <div className="schedule-hour-line" style={{ top: hour * hourHeight }} key={hour} />)}
+            {rowActuations.length === 0 && onProviderDrop && <div className="schedule-drop-hint"><Plus size={16} /><span>Solte um provedor aqui</span></div>}
+            {positions.map(({ actuation, start, end, lane, laneCount }) => {
+              const duration = Math.max(0, end - start);
+              const durationLabel = duration >= 60
+                ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}min` : ""}`
+                : `${duration}min`;
+              return <article className="schedule-event" key={actuation.id} title={`${actuation.providerName} · ${actuation.startTime}–${actuation.endTime}`} style={{
+                top: start / 60 * hourHeight + 2,
+                height: Math.max(duration / 60 * hourHeight - 4, 34),
+                left: `calc(${lane / laneCount * 100}% + 3px)`,
+                width: `calc(${100 / laneCount}% - 6px)`,
+              }}>
+                <div className="schedule-event-title"><Building2 size={13} /><b>{actuation.providerName}</b></div>
+                <span className="schedule-event-time">{actuation.startTime}–{actuation.endTime} · {durationLabel}</span>
+                {(onEdit || onDelete) && <div className="schedule-event-actions">
+                  {onEdit && <button className="icon-button row-action" aria-label={`Editar ${actuation.providerName}`} onClick={() => onEdit(actuation)}><Pencil size={13} /></button>}
+                  {onDelete && <button className="icon-button row-action danger-action" aria-label={`Excluir ${actuation.providerName}`} onClick={() => onDelete(actuation)}><Trash2 size={13} /></button>}
+                </div>}
+              </article>;
+            })}
+          </div>;
+        })}
+      </div>
+    </div>
+  </div>;
+}
+
+function ActuationDialog({ actuation, providers, collaborators, demoMode, initialProviderId, initialCollaboratorId, initialServiceDate, onClose, onSaved, setNotice }: { actuation: Actuation | null; providers: Provider[]; collaborators: UserProfile[]; demoMode: boolean; initialProviderId?: string; initialCollaboratorId?: string; initialServiceDate?: string; onClose: () => void; onSaved: (actuation: Actuation) => Promise<void>; setNotice: (value: string) => void }) {
+  const [providerId, setProviderId] = useState(actuation?.providerId ?? initialProviderId ?? providers[0]?.id ?? "");
+  const [collaboratorId, setCollaboratorId] = useState(actuation?.collaboratorId ?? initialCollaboratorId ?? collaborators[0]?.uid ?? "");
+  const [serviceDate, setServiceDate] = useState(actuation?.serviceDate ?? initialServiceDate ?? localDateString(new Date()));
   const [startTime, setStartTime] = useState(actuation?.startTime ?? "08:00");
   const [endTime, setEndTime] = useState(actuation?.endTime ?? "17:00");
   const [saving, setSaving] = useState(false);
