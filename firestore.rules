@@ -1,0 +1,245 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return signedIn() && profile().role == 'admin';
+    }
+
+    function assignedTo(providerId) {
+      return signedIn() && profile().providerId == providerId;
+    }
+
+    function validMassEventTicket() {
+      return !request.resource.data.keys().hasAny(['subjectId']) &&
+        request.resource.data.keys().hasAny(['subjectName']) &&
+        request.resource.data.subjectName == 'EVENTO NA REDE' &&
+        request.resource.data.level == 'Massivo' &&
+        request.resource.data.description == 'EVENTO NA REDE';
+    }
+
+    function validTicketSubject() {
+      return validMassEventTicket() ||
+        (!request.resource.data.keys().hasAny(['subjectId', 'subjectName']) ||
+        (request.resource.data.keys().hasAll(['subjectId', 'subjectName']) &&
+         request.resource.data.subjectId is string &&
+         request.resource.data.subjectName is string &&
+         exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)) &&
+         (
+           (
+             get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.keys().hasAny(['providerIds']) &&
+             get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.providerIds is list &&
+             get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.providerIds.hasAny([request.resource.data.providerId])
+           ) ||
+           (
+             !get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.keys().hasAny(['providerIds']) &&
+             get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.providerId == request.resource.data.providerId
+           )
+         ) &&
+         get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.name == request.resource.data.subjectName));
+    }
+
+    function validTicket() {
+      return request.resource.data.keys().hasAll([
+          'providerId', 'collaboratorId', 'collaboratorName', 'protocol',
+          'contact', 'customer', 'address', 'level', 'description', 'createdAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'providerId', 'collaboratorId', 'collaboratorName', 'protocol',
+          'contact', 'customer', 'address', 'level', 'description', 'createdAt', 'clientCreatedAt',
+          'subjectId', 'subjectName'
+        ]) &&
+        request.resource.data.level in ['N1', 'N2', 'Massivo', 'Pré Venda'] &&
+        request.resource.data.protocol is string &&
+        request.resource.data.contact is string &&
+        request.resource.data.customer is string &&
+        request.resource.data.address is string &&
+        request.resource.data.description is string &&
+        request.resource.data.createdAt == request.time &&
+        (!request.resource.data.keys().hasAny(['clientCreatedAt']) ||
+         request.resource.data.clientCreatedAt is timestamp) &&
+        validTicketSubject();
+    }
+
+    function validSale(ticketId) {
+      return request.resource.data.ticketId == ticketId &&
+        exists(/databases/$(database)/documents/tickets/$(ticketId)) &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.level == 'Pré Venda' &&
+        get(/databases/$(database)/documents/tickets/$(ticketId)).data.providerId == request.resource.data.providerId;
+    }
+
+    function validActuation(data) {
+      return data.keys().hasAll([
+          'providerId', 'providerName', 'collaboratorId', 'collaboratorName',
+          'serviceDate', 'startTime', 'endTime', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'providerId', 'providerName', 'collaboratorId', 'collaboratorName',
+          'serviceDate', 'startTime', 'endTime', 'createdAt', 'updatedAt'
+        ]) &&
+        data.providerId is string &&
+        data.providerName is string &&
+        exists(/databases/$(database)/documents/providers/$(data.providerId)) &&
+        get(/databases/$(database)/documents/providers/$(data.providerId)).data.name == data.providerName &&
+        data.collaboratorId is string &&
+        data.collaboratorName is string &&
+        exists(/databases/$(database)/documents/users/$(data.collaboratorId)) &&
+        get(/databases/$(database)/documents/users/$(data.collaboratorId)).data.role == 'collaborator' &&
+        get(/databases/$(database)/documents/users/$(data.collaboratorId)).data.name == data.collaboratorName &&
+        data.serviceDate is string &&
+        data.serviceDate.size() == 10 &&
+        data.startTime is string &&
+        data.startTime.size() == 5 &&
+        data.startTime.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$') &&
+        data.endTime is string &&
+        data.endTime.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$') &&
+        data.startTime < data.endTime &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, delete: if false;
+      allow update: if isAdmin() ||
+        (signedIn() && request.auth.uid == uid &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'isOnline', 'lastSeenAt', 'onlineSince', 'lastOnlineDurationSeconds',
+           'isPaused', 'pauseSince', 'lastPauseAt', 'lastPauseDurationSeconds'
+         ]) &&
+         request.resource.data.lastSeenAt == request.time &&
+         (!request.resource.data.keys().hasAny(['isPaused']) || request.resource.data.isPaused is bool) &&
+         (!request.resource.data.keys().hasAny(['pauseSince']) ||
+           request.resource.data.pauseSince == null ||
+           request.resource.data.pauseSince is timestamp) &&
+         (!request.resource.data.keys().hasAny(['isPaused']) ||
+           (request.resource.data.isPaused == true
+             ? request.resource.data.pauseSince is timestamp
+             : request.resource.data.pauseSince == null)) &&
+         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastPauseAt']) ||
+           request.resource.data.lastPauseAt == request.time) &&
+         (!request.resource.data.keys().hasAny(['lastPauseDurationSeconds']) ||
+           request.resource.data.lastPauseDurationSeconds is number) &&
+         (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'isPaused', 'pauseSince', 'lastPauseAt', 'lastPauseDurationSeconds'
+          ]) ||
+          profile().role == 'collaborator'));
+    }
+
+    match /providers/{providerId} {
+      allow read: if isAdmin() ||
+        (signedIn() && profile().role == 'collaborator') ||
+        assignedTo(providerId);
+      allow write: if isAdmin();
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if isAdmin() ||
+        (signedIn() && profile().role == 'collaborator');
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /pauseEvents/{eventId} {
+      allow read: if signedIn() && profile().role == 'collaborator';
+      allow create: if signedIn() &&
+        profile().role == 'collaborator' &&
+        profile().isPaused == true &&
+        request.resource.data.keys().hasAll(['actorUid', 'collaboratorName', 'createdAt']) &&
+        request.resource.data.keys().hasOnly(['actorUid', 'collaboratorName', 'createdAt']) &&
+        request.resource.data.actorUid == request.auth.uid &&
+        request.resource.data.collaboratorName == profile().name &&
+        request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /tickets/{ticketId} {
+      allow read: if isAdmin() ||
+        (signedIn() && profile().role == 'provider' &&
+         assignedTo(resource.data.providerId));
+      allow create: if (isAdmin() && validTicket()) ||
+        (signedIn() && profile().role == 'collaborator' &&
+         request.resource.data.collaboratorId == request.auth.uid &&
+         request.resource.data.collaboratorName == profile().name &&
+         request.resource.data.providerId is string &&
+         exists(/databases/$(database)/documents/providers/$(request.resource.data.providerId)) &&
+         (request.resource.data.keys().hasAll(['subjectId', 'subjectName']) || validMassEventTicket()) &&
+         validTicket());
+      allow update, delete: if isAdmin();
+    }
+
+    match /ticketComments/{commentId} {
+      allow read: if isAdmin();
+      allow create: if signedIn() &&
+        profile().role == 'provider' &&
+        request.resource.data.keys().hasAll([
+          'ticketId', 'providerId', 'providerName', 'protocol',
+          'comment', 'authorUid', 'createdAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'ticketId', 'providerId', 'providerName', 'protocol',
+          'comment', 'authorUid', 'createdAt'
+        ]) &&
+        request.resource.data.ticketId is string &&
+        exists(/databases/$(database)/documents/tickets/$(request.resource.data.ticketId)) &&
+        get(/databases/$(database)/documents/tickets/$(request.resource.data.ticketId)).data.providerId == profile().providerId &&
+        request.resource.data.providerId == profile().providerId &&
+        exists(/databases/$(database)/documents/providers/$(request.resource.data.providerId)) &&
+        request.resource.data.providerName == get(/databases/$(database)/documents/providers/$(request.resource.data.providerId)).data.name &&
+        request.resource.data.protocol == get(/databases/$(database)/documents/tickets/$(request.resource.data.ticketId)).data.protocol &&
+        request.resource.data.comment is string &&
+        request.resource.data.comment.size() > 0 &&
+        request.resource.data.comment.size() <= 2000 &&
+        request.resource.data.authorUid == request.auth.uid &&
+        request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /sales/{saleId} {
+      allow read: if isAdmin() ||
+        (signedIn() && profile().role == 'provider' &&
+         assignedTo(resource.data.providerId));
+      allow create, update: if isAdmin() && validSale(saleId);
+      allow delete: if isAdmin();
+    }
+
+    match /archivedClosings/{closingId} {
+      allow read: if isAdmin() ||
+        (signedIn() && profile().role == 'provider' &&
+         assignedTo(resource.data.providerId));
+      allow create: if isAdmin() &&
+        request.resource.data.providerId is string &&
+        request.resource.data.providerName is string &&
+        request.resource.data.startDate is string &&
+        request.resource.data.endDate is string &&
+        request.resource.data.ticketCount is number &&
+        request.resource.data.total is number;
+      allow update, delete: if false;
+    }
+
+    match /actuations/{actuationId} {
+      allow read: if isAdmin() ||
+        (signedIn() && profile().role == 'collaborator' &&
+         resource.data.collaboratorId == request.auth.uid);
+      allow create: if isAdmin() &&
+        validActuation(request.resource.data) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin() &&
+        validActuation(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time;
+      allow delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
