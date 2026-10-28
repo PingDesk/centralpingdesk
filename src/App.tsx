@@ -161,7 +161,6 @@ const emptyProvider = {
   billingStartDay: 1,
   billingEndDay: 0,
   protocolPattern: "",
-  diagnosticIpsText: "",
 };
 
 function firebaseError(error: unknown): string {
@@ -962,7 +961,7 @@ function App() {
           {view === "Dashboard" && <Dashboard tickets={tickets} historicalTickets={[...tickets, ...archivedTickets]} providers={providers} users={users} sales={sales} actuations={actuations} handoffAlerts={handoffAlerts} providerComments={providerComments} profile={profile} onTogglePause={togglePause} pauseBusy={pauseBusy} />}
           {view === "Chamados" && <Calls tickets={tickets} subjects={subjects} providers={providers} users={users} profile={profile} demoMode={demoMode} onDemoCreate={addDemoTicket} onAddComment={addProviderComment} onReload={loadData} setNotice={setNotice} />}
           {view === "Registro em Massa" && isCollaborator && <MassTicketRegistration providers={providers} profile={profile} demoMode={demoMode} onDemoCreate={addDemoTicket} onReload={loadData} setNotice={setNotice} />}
-          {view === "PowerShell" && isCollaborator && <PowerShellTools providers={providers} />}
+          {view === "PowerShell" && isCollaborator && <PowerShellTools />}
           {view === "Pré Fechamento" && profile.role === "provider" && <Closing tickets={tickets} providers={providers} sales={sales} profile={profile} archivedClosings={archivedClosings} onArchive={archiveClosing} />}
           {view === "Vendas" && isAdmin && <Sales tickets={tickets} providers={providers} sales={sales} onReload={loadData} setNotice={setNotice} />}
           {view === "Provedores" && isAdmin && <Providers providers={providers} onReload={loadData} setNotice={setNotice} onCreateAccess={(provider) => { setAccessPreset({ role: "provider", providerId: provider.id }); setView("Acessos"); }} />}
@@ -1313,26 +1312,21 @@ function MassTicketRegistration({ providers, profile, demoMode, onDemoCreate, on
   </section>;
 }
 
-function PowerShellTools({ providers }: { providers: Provider[] }) {
-  const authorizedTargets = providers.flatMap((provider) =>
-    Array.from(new Set((provider.diagnosticIps ?? []).map((ipAddress) => ipAddress.trim()).filter(isValidIpv4)))
-      .map((ipAddress) => ({ providerId: provider.id, providerName: provider.name, ipAddress })),
-  );
-  const [targetKey, setTargetKey] = useState("");
+function PowerShellTools() {
+  const [ipAddress, setIpAddress] = useState("");
   const [copiedCommand, setCopiedCommand] = useState("");
   const [copyError, setCopyError] = useState("");
-  const selectedTarget = authorizedTargets.find((target) => `${target.providerId}:${target.ipAddress}` === targetKey);
-  const ipAddress = selectedTarget?.ipAddress;
-  const validIp = Boolean(ipAddress && isValidIpv4(ipAddress));
+  const targetIp = ipAddress.trim();
+  const validIp = isValidIpv4(targetIp);
   const ports = [80, 443, 8080, 8081, 8082, 8085, 8086, 8090];
-  const batchCommand = ipAddress
-    ? `$ip = "${ipAddress}"\n$portas = ${ports.join(",")}\n\nforeach ($porta in $portas) {\n    $resultado = Test-NetConnection $ip -Port $porta -WarningAction SilentlyContinue\n    [PSCustomObject]@{\n        IP        = $ip\n        Porta     = $porta\n        Resultado = if ($resultado.TcpTestSucceeded) { "ABERTA" } else { "FECHADA/BLOQUEADA" }\n    }\n}`
+  const batchCommand = validIp
+    ? `$ip = "${targetIp}"\n$portas = ${ports.join(",")}\n\nforeach ($porta in $portas) {\n    $resultado = Test-NetConnection $ip -Port $porta -WarningAction SilentlyContinue\n    [PSCustomObject]@{\n        IP        = $ip\n        Porta     = $porta\n        Resultado = if ($resultado.TcpTestSucceeded) { "ABERTA" } else { "FECHADA/BLOQUEADA" }\n    }\n}`
     : "";
-  const address = validIp ? ipAddress ?? "<IP>" : "<IP>";
+  const address = validIp ? targetIp : "<IP>";
   const commands = [
     { id: "ping", title: "Testar conectividade (Ping)", description: "Envia quatro solicitações ICMP para verificar se o endereço responde.", command: `Test-Connection -ComputerName "${address}" -Count 4`, enabled: validIp },
     { id: "tracert", title: "Verificar rota (Tracert)", description: "Mostra os saltos da rota até o endereço, sem resolução de nomes em cada salto.", command: `tracert.exe -d "${address}"`, enabled: validIp },
-    { id: "ports", title: "Testar as 8 portas TCP usadas pela equipe", description: `Testa em sequência as portas ${ports.join(", ")} no endereço autorizado selecionado.`, command: batchCommand || "Selecione um destino autorizado para gerar o comando.", enabled: validIp },
+    { id: "ports", title: "Testar as 8 portas TCP usadas pela equipe", description: `Testa em sequência as portas ${ports.join(", ")} no IP informado.`, command: batchCommand || "Informe um endereço IPv4 válido para gerar o comando.", enabled: validIp },
   ];
 
   async function copyCommand(id: string, command: string) {
@@ -1348,11 +1342,11 @@ function PowerShellTools({ providers }: { providers: Provider[] }) {
 
   return <section className="panel powershell-panel">
     <div className="panel-heading"><div><h2>Diagnóstico de rede no PowerShell</h2><p>Monte um comando para copiar e executar no PowerShell do seu computador.</p></div><span className="panel-period"><Terminal size={14} /> Ferramentas locais</span></div>
-    <div className="notice warning-notice powershell-safety"><ShieldCheck size={16} /><span>Os testes ficam limitados aos IPs autorizados cadastrados pelo administrador nos provedores. Os comandos não são executados pela Central: são copiados para execução local.</span></div>
+    <div className="notice warning-notice powershell-safety"><ShieldCheck size={16} /><span>Informe o endereço IPv4 que deseja testar. Os comandos não são executados pela Central: são copiados para execução local no seu computador.</span></div>
     <div className="powershell-target-fields">
-      <label className="powershell-target-select">Destino autorizado<select value={targetKey} onChange={(event) => setTargetKey(event.target.value)}><option value="">Selecione provedor e IP</option>{authorizedTargets.map((target) => <option key={`${target.providerId}:${target.ipAddress}`} value={`${target.providerId}:${target.ipAddress}`}>{target.providerName} · {target.ipAddress}</option>)}</select><small>O administrador cadastra os endereços em Provedores → Editar.</small></label>
+      <label className="powershell-ip-input">Endereço IPv4<input type="text" inputMode="decimal" autoComplete="off" placeholder="Ex.: 100.100.70.217" value={ipAddress} aria-invalid={Boolean(targetIp) && !validIp} onChange={(event) => setIpAddress(event.target.value)} /><small>Digite qualquer IPv4 válido para gerar os comandos de diagnóstico.</small></label>
     </div>
-    {authorizedTargets.length === 0 && <div className="notice warning-notice powershell-copy-error">Ainda não há IPs de diagnóstico autorizados cadastrados. Solicite ao administrador que os adicione ao provedor correto.</div>}
+    {targetIp && !validIp && <div className="notice error-notice powershell-copy-error" role="alert">Informe um endereço IPv4 válido.</div>}
     {copyError && <div className="notice error-notice powershell-copy-error" role="alert">{copyError}</div>}
     <div className="powershell-command-list">{commands.map((item) => <article className="powershell-command-card" key={item.id}>
       <div className="powershell-command-description"><span className="powershell-command-icon"><Terminal size={16} /></span><span><b>{item.title}</b><small>{item.description}</small></span></div>
@@ -1735,7 +1729,7 @@ function Providers({ providers, onReload, setNotice, onCreateAccess }: { provide
   const [confirmDelete, setConfirmDelete] = useState<Provider | null>(null);
   return <>
     <section className="panel table-panel"><div className="panel-heading"><div><h2>Provedores cadastrados</h2><p>Franquias, valores e ciclos de contabilização</p></div><button className="button primary" onClick={() => setCreating(true)}><Plus size={16} /> Novo provedor</button></div>
-      {providers.length ? <div className="table-scroll"><table><thead><tr><th>PROVEDOR</th><th>CNPJ</th><th>FRANQUIA</th><th>VALOR FIXO</th><th>CICLO</th><th>IPS DE DIAGNÓSTICO</th><th>AÇÕES</th></tr></thead><tbody>{providers.map((provider) => <tr key={provider.id}><td><b>{provider.name}</b></td><td>{provider.cnpj || "—"}</td><td>{provider.includedCalls} chamados</td><td>{currency(provider.fixedMonthly)}</td><td>Dia {provider.billingStartDay} a {provider.billingEndDay || "último"}</td><td className="truncate-cell" title={provider.diagnosticIps?.join(", ")}>{provider.diagnosticIps?.length ? provider.diagnosticIps.join(", ") : "—"}</td><td><div className="row-actions"><button className="icon-button row-action" onClick={() => onCreateAccess(provider)} title="Criar acesso do provedor"><Users size={15} /></button><button className="icon-button row-action" onClick={() => setEditing(provider)} title="Editar"><Pencil size={15} /></button><button className="icon-button row-action danger-action" onClick={() => setConfirmDelete(provider)} title="Excluir"><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState icon={Building2} title="Nenhum provedor cadastrado" text="Cadastre provedores para começar a registrar chamados e fechamentos." />}
+      {providers.length ? <div className="table-scroll"><table><thead><tr><th>PROVEDOR</th><th>CNPJ</th><th>FRANQUIA</th><th>VALOR FIXO</th><th>CICLO</th><th>AÇÕES</th></tr></thead><tbody>{providers.map((provider) => <tr key={provider.id}><td><b>{provider.name}</b></td><td>{provider.cnpj || "—"}</td><td>{provider.includedCalls} chamados</td><td>{currency(provider.fixedMonthly)}</td><td>Dia {provider.billingStartDay} a {provider.billingEndDay || "último"}</td><td><div className="row-actions"><button className="icon-button row-action" onClick={() => onCreateAccess(provider)} title="Criar acesso do provedor"><Users size={15} /></button><button className="icon-button row-action" onClick={() => setEditing(provider)} title="Editar"><Pencil size={15} /></button><button className="icon-button row-action danger-action" onClick={() => setConfirmDelete(provider)} title="Excluir"><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState icon={Building2} title="Nenhum provedor cadastrado" text="Cadastre provedores para começar a registrar chamados e fechamentos." />}
     </section>
     {(creating || editing) && <ProviderDialog provider={editing} onClose={() => { setCreating(false); setEditing(null); }} onSaved={async () => { setCreating(false); setEditing(null); await onReload(); }} setNotice={setNotice} />}
     {confirmDelete && <ConfirmDialog title="Excluir provedor?" text={`O cadastro de ${confirmDelete.name} será removido. Chamados existentes não serão apagados.`} onCancel={() => setConfirmDelete(null)} onConfirm={async () => { try { await deleteDoc(doc(db!, "providers", confirmDelete.id)); setNotice("Provedor excluído."); setConfirmDelete(null); await onReload(); } catch (error) { setNotice(`Erro ao excluir provedor: ${firebaseError(error)}`); } }} />}
@@ -1747,7 +1741,6 @@ function ProviderDialog({ provider, onClose, onSaved, setNotice }: { provider: P
     name: provider.name, cnpj: provider.cnpj, includedCalls: provider.includedCalls, fixedMonthly: provider.fixedMonthly,
     n1: provider.rates?.N1 ?? 0, n2: provider.rates?.N2 ?? 0, preSale: provider.rates?.["Pré Venda"] ?? 0, massive: provider.rates?.Massivo ?? 0,
     billingStartDay: provider.billingStartDay, billingEndDay: provider.billingEndDay, protocolPattern: provider.protocolPattern ?? "",
-    diagnosticIpsText: (provider.diagnosticIps ?? []).join("\n"),
   } : {}) });
   const [saving, setSaving] = useState(false);
   function numberField(key: "includedCalls" | "fixedMonthly" | "n1" | "n2" | "preSale" | "massive", label: string) {
@@ -1763,13 +1756,7 @@ function ProviderDialog({ provider, onClose, onSaved, setNotice }: { provider: P
         name: form.name.trim(), cnpj: form.cnpj.trim(), includedCalls: Number(form.includedCalls), fixedMonthly: Number(form.fixedMonthly),
         rates: { N1: Number(form.n1), N2: Number(form.n2), "Pré Venda": Number(form.preSale), Massivo: Number(form.massive) },
         billingStartDay: Number(form.billingStartDay), billingEndDay: Number(form.billingEndDay), protocolPattern: form.protocolPattern.trim(),
-        diagnosticIps: Array.from(new Set(form.diagnosticIpsText.split(/[\s,;]+/).map((ip) => ip.trim()).filter(Boolean))),
       };
-      if (payload.diagnosticIps.length > 20 || payload.diagnosticIps.some((ip) => !isValidIpv4(ip))) {
-        setNotice("Informe até 20 endereços IPv4 válidos, um por linha.");
-        setSaving(false);
-        return;
-      }
       if (provider) await updateDoc(doc(db, "providers", provider.id), payload);
       else await setDoc(doc(collection(db, "providers")), { ...payload, createdAt: serverTimestamp() });
       setNotice(provider ? "Cadastro do provedor atualizado." : "Provedor cadastrado.");
@@ -1789,7 +1776,6 @@ function ProviderDialog({ provider, onClose, onSaved, setNotice }: { provider: P
     <label>Início do ciclo (dia)<input type="number" min="1" max="31" value={form.billingStartDay} onChange={(event) => setForm({ ...form, billingStartDay: Number(event.target.value) })} /></label>
     <label>Fim do ciclo (dia)<input type="number" min="0" max="31" value={form.billingEndDay} onChange={(event) => setForm({ ...form, billingEndDay: Number(event.target.value) })} /><small>Informe 0 para usar o último dia do mês.</small></label>
     <label className="field-span">Padrão de protocolo (expressão regular)<input value={form.protocolPattern} onChange={(event) => setForm({ ...form, protocolPattern: event.target.value })} placeholder="Ex.: ^ABC-\\d{6}$" /><small>Opcional. Usado no fechamento para sinalizar protocolos fora do padrão.</small></label>
-    <label className="field-span">IPs autorizados para diagnóstico<textarea rows={4} maxLength={4000} value={form.diagnosticIpsText} onChange={(event) => setForm({ ...form, diagnosticIpsText: event.target.value })} placeholder={"Um endereço IPv4 por linha\nEx.: 100.100.70.217"} /><small>Somente colaboradores poderão testar portas nos endereços cadastrados aqui. Até 20 IPv4 por provedor.</small></label>
     <div className="modal-actions"><button type="button" className="button outline" onClick={onClose}>Cancelar</button><button className="button primary" disabled={saving}>{saving ? "Salvando..." : "Salvar provedor"}</button></div>
   </form></Modal>;
 }

@@ -26,7 +26,6 @@ export interface Provider {
   billingStartDay: number;
   billingEndDay: number;
   protocolPattern: string;
-  diagnosticIps?: string[];
   createdAt?: { toDate: () => Date };
 }
 

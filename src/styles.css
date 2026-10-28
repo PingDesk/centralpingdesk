@@ -299,8 +299,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .powershell-safety span { display: block; }
 .powershell-target-fields { max-width: 760px; margin-bottom: 17px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .powershell-target-fields label { min-width: 0; display: grid; gap: 6px; color: #c4d2df; font-size: 10px; font-weight: 600; }
-.powershell-target-select { grid-column: 1 / -1; max-width: 600px; }
-.powershell-target-select select { min-height: 39px; padding: 0 10px; border: 1px solid var(--line-light); border-radius: 8px; color: var(--text); background: #08111b; font-size: 11px; }
+.powershell-ip-input { grid-column: 1 / -1; max-width: 600px; }
 .powershell-target-fields input { min-height: 39px; padding: 0 10px; border: 1px solid var(--line-light); border-radius: 8px; color: var(--text); background: #08111b; font-size: 11px; }
 .powershell-target-fields input[aria-invalid="true"] { border-color: rgba(255, 114, 125, .6); }
 .powershell-target-fields small { color: #75889b; font-size: 9px; font-weight: 400; }
