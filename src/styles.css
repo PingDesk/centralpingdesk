@@ -299,6 +299,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .powershell-safety span { display: block; }
 .powershell-target-fields { max-width: 760px; margin-bottom: 17px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .powershell-target-fields label { min-width: 0; display: grid; gap: 6px; color: #c4d2df; font-size: 10px; font-weight: 600; }
+.powershell-target-select { grid-column: 1 / -1; max-width: 600px; }
+.powershell-target-select select { min-height: 39px; padding: 0 10px; border: 1px solid var(--line-light); border-radius: 8px; color: var(--text); background: #08111b; font-size: 11px; }
 .powershell-target-fields input { min-height: 39px; padding: 0 10px; border: 1px solid var(--line-light); border-radius: 8px; color: var(--text); background: #08111b; font-size: 11px; }
 .powershell-target-fields input[aria-invalid="true"] { border-color: rgba(255, 114, 125, .6); }
 .powershell-target-fields small { color: #75889b; font-size: 9px; font-weight: 400; }
@@ -312,6 +314,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .powershell-command-description b { color: #dce8f1; font-size: 11px; }
 .powershell-command-description small { margin-top: 3px; color: #8193a5; font-size: 9px; line-height: 1.5; }
 .powershell-command-card pre { padding: 10px 11px; margin: 11px 0; overflow-x: auto; border: 1px solid #1c2c3b; border-radius: 6px; color: #a8e4ed; background: #060d14; font: 10px/1.6 "DM Mono", monospace; }
+.powershell-command-card pre code { white-space: pre; }
 .powershell-command-card .button { min-height: 32px; font-size: 9px; }
 .powershell-copy-error { max-width: 760px; margin-bottom: 12px; }
 .filter-search { min-width: 180px; height: 38px; flex: 1; padding: 0 10px; display: flex; align-items: center; gap: 8px; border: 1px solid #203145; border-radius: 8px; background: #08111b; color: #758ba0; }
