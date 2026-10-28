@@ -294,6 +294,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .handoff-next-person { text-align: right; }
 .handoff-next-person span { color: #a9987c; font-size: 8px; text-transform: uppercase; letter-spacing: .5px; }
 .handoff-next-person b { margin-top: 3px; color: #ffe0aa; font-size: 10px; }
+.powershell-panel { padding: 18px 19px 20px; }
+.powershell-safety { margin: 11px 0 17px; align-items: flex-start; }
+.powershell-safety span { display: block; }
+.powershell-target-fields { max-width: 760px; margin-bottom: 17px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.powershell-target-fields label { min-width: 0; display: grid; gap: 6px; color: #c4d2df; font-size: 10px; font-weight: 600; }
+.powershell-target-fields input { min-height: 39px; padding: 0 10px; border: 1px solid var(--line-light); border-radius: 8px; color: var(--text); background: #08111b; font-size: 11px; }
+.powershell-target-fields input[aria-invalid="true"] { border-color: rgba(255, 114, 125, .6); }
+.powershell-target-fields small { color: #75889b; font-size: 9px; font-weight: 400; }
+.optional-label { color: #75889b; font-size: 8px; font-weight: 400; }
+.powershell-command-list { max-width: 920px; display: grid; gap: 11px; }
+.powershell-command-card { padding: 13px; border: 1px solid #1d3041; border-radius: 9px; background: #0a141e; }
+.powershell-command-description { display: flex; align-items: center; gap: 9px; }
+.powershell-command-description > span:last-child { min-width: 0; }
+.powershell-command-icon { width: 31px; height: 31px; flex: 0 0 31px; display: grid; place-items: center; border: 1px solid rgba(34, 200, 232, .15); border-radius: 8px; color: var(--cyan); background: rgba(34, 200, 232, .07); }
+.powershell-command-description b, .powershell-command-description small { display: block; }
+.powershell-command-description b { color: #dce8f1; font-size: 11px; }
+.powershell-command-description small { margin-top: 3px; color: #8193a5; font-size: 9px; line-height: 1.5; }
+.powershell-command-card pre { padding: 10px 11px; margin: 11px 0; overflow-x: auto; border: 1px solid #1c2c3b; border-radius: 6px; color: #a8e4ed; background: #060d14; font: 10px/1.6 "DM Mono", monospace; }
+.powershell-command-card .button { min-height: 32px; font-size: 9px; }
+.powershell-copy-error { max-width: 760px; margin-bottom: 12px; }
 .filter-search { min-width: 180px; height: 38px; flex: 1; padding: 0 10px; display: flex; align-items: center; gap: 8px; border: 1px solid #203145; border-radius: 8px; background: #08111b; color: #758ba0; }
 .filter-search input { width: 100%; height: 100%; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 11px; }
 .filter-search:focus-within { border-color: rgba(34, 200, 232, .55); }
@@ -500,6 +520,8 @@ code { color: #a8e8f0; font-family: "DM Mono", monospace; font-size: .92em; }
   .mass-registration-footer .button { width: 100%; }
   .handoff-alert-item { align-items: flex-start; flex-direction: column; gap: 9px; }
   .handoff-next-person { text-align: left; }
+  .powershell-target-fields { grid-template-columns: 1fr; }
+  .powershell-panel { padding: 14px 12px 16px; }
   .form-grid { grid-template-columns: 1fr; }
   .field-span, .modal-actions { grid-column: 1; }
   .modal-backdrop { padding: 10px; }

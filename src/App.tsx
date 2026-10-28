@@ -13,6 +13,7 @@ import {
   ChevronDown,
   CircleHelp,
   Clock3,
+  Copy,
   FileSpreadsheet,
   Headset,
   LayoutDashboard,
@@ -26,6 +27,7 @@ import {
   Play,
   Search,
   ShieldCheck,
+  Terminal,
   Trash2,
   Users,
   Wifi,
@@ -98,6 +100,7 @@ type View =
   | "Dashboard"
   | "Chamados"
   | "Registro em Massa"
+  | "PowerShell"
   | "Pré Fechamento"
   | "Vendas"
   | "Provedores"
@@ -125,6 +128,7 @@ const collaboratorNavigation: { name: View; icon: typeof LayoutDashboard }[] = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Chamados", icon: Headset },
   { name: "Registro em Massa", icon: FileSpreadsheet },
+  { name: "PowerShell", icon: Terminal },
 ];
 
 const providerNavigation: { name: View; icon: typeof LayoutDashboard }[] = [
@@ -950,6 +954,7 @@ function App() {
           {view === "Dashboard" && <Dashboard tickets={tickets} historicalTickets={[...tickets, ...archivedTickets]} providers={providers} users={users} sales={sales} actuations={actuations} handoffAlerts={handoffAlerts} providerComments={providerComments} profile={profile} onTogglePause={togglePause} pauseBusy={pauseBusy} />}
           {view === "Chamados" && <Calls tickets={tickets} subjects={subjects} providers={providers} users={users} profile={profile} demoMode={demoMode} onDemoCreate={addDemoTicket} onAddComment={addProviderComment} onReload={loadData} setNotice={setNotice} />}
           {view === "Registro em Massa" && isCollaborator && <MassTicketRegistration providers={providers} profile={profile} demoMode={demoMode} onDemoCreate={addDemoTicket} onReload={loadData} setNotice={setNotice} />}
+          {view === "PowerShell" && isCollaborator && <PowerShellTools />}
           {view === "Pré Fechamento" && profile.role === "provider" && <Closing tickets={tickets} providers={providers} sales={sales} profile={profile} archivedClosings={archivedClosings} onArchive={archiveClosing} />}
           {view === "Vendas" && isAdmin && <Sales tickets={tickets} providers={providers} sales={sales} onReload={loadData} setNotice={setNotice} />}
           {view === "Provedores" && isAdmin && <Providers providers={providers} onReload={loadData} setNotice={setNotice} onCreateAccess={(provider) => { setAccessPreset({ role: "provider", providerId: provider.id }); setView("Acessos"); }} />}
@@ -997,6 +1002,7 @@ function PageHeading({ view, profile, onRefresh }: { view: View; profile: UserPr
         : "Acompanhe a operação e os indicadores em tempo real.",
     Chamados: profile.role === "collaborator" ? "Registre um novo atendimento com os dados do cliente." : "Gerencie os atendimentos e acompanhe cada protocolo.",
     "Registro em Massa": "Registre vários protocolos de um evento de rede em um único envio.",
+    PowerShell: "Copie comandos locais para diagnóstico de conectividade e portas autorizadas.",
     "Pré Fechamento": "Confira a franquia, os excedentes e os valores previstos do seu ciclo.",
     Vendas: "Converta oportunidades de pré-venda em novos clientes.",
     Provedores: "Cadastre provedores, contratos e regras de cobrança.",
@@ -1296,6 +1302,51 @@ function MassTicketRegistration({ providers, profile, demoMode, onDemoCreate, on
       </div>
       <div className="mass-registration-footer"><small>Até {maxProtocols} protocolos por envio.</small><button className="button primary" disabled={!canSave}>{saving ? "Salvando..." : `Salvar ${filledProtocols.length || ""} chamado${filledProtocols.length === 1 ? "" : "s"}`}</button></div>
     </form>
+  </section>;
+}
+
+function PowerShellTools() {
+  const [ipAddress, setIpAddress] = useState("");
+  const [port, setPort] = useState("");
+  const [copiedCommand, setCopiedCommand] = useState("");
+  const [copyError, setCopyError] = useState("");
+  const octets = ipAddress.trim().split(".");
+  const validIp = octets.length === 4 && octets.every((octet) =>
+    /^\d{1,3}$/.test(octet) && Number(octet) >= 0 && Number(octet) <= 255,
+  );
+  const portNumber = Number(port);
+  const validPort = /^\d{1,5}$/.test(port) && Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535;
+  const address = validIp ? ipAddress.trim() : "<IP>";
+  const commands = [
+    { id: "ping", title: "Testar conectividade (Ping)", description: "Envia quatro solicitações ICMP para verificar se o endereço responde.", command: `Test-Connection -ComputerName "${address}" -Count 4`, enabled: validIp },
+    { id: "tracert", title: "Verificar rota (Tracert)", description: "Mostra os saltos da rota até o endereço, sem resolução de nomes em cada salto.", command: `tracert.exe -d "${address}"`, enabled: validIp },
+    { id: "port", title: "Testar uma porta TCP", description: "Testa somente a porta TCP informada neste endereço; não faz varredura de portas.", command: `Test-NetConnection -ComputerName "${address}" -Port ${validPort ? portNumber : "<PORTA>"}`, enabled: validIp && validPort },
+  ];
+
+  async function copyCommand(id: string, command: string) {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopiedCommand(id);
+      setCopyError("");
+      window.setTimeout(() => setCopiedCommand((current) => current === id ? "" : current), 2500);
+    } catch (error) {
+      setCopyError(`Não foi possível copiar o comando: ${firebaseError(error)}`);
+    }
+  }
+
+  return <section className="panel powershell-panel">
+    <div className="panel-heading"><div><h2>Diagnóstico de rede no PowerShell</h2><p>Monte um comando para copiar e executar no PowerShell do seu computador.</p></div><span className="panel-period"><Terminal size={14} /> Ferramentas locais</span></div>
+    <div className="notice warning-notice powershell-safety"><ShieldCheck size={16} /><span>Use estes testes somente em endereços e serviços que você está autorizado a verificar. Os comandos não são executados pela Central: são copiados para execução local.</span></div>
+    <div className="powershell-target-fields">
+      <label>Endereço IPv4<input inputMode="decimal" autoComplete="off" value={ipAddress} onChange={(event) => setIpAddress(event.target.value)} placeholder="Ex.: 192.0.2.10" aria-invalid={Boolean(ipAddress && !validIp)} /><small>Informe um endereço IPv4 válido.</small></label>
+      <label>Porta TCP <span className="optional-label">necessária apenas para o teste de porta</span><input type="number" min="1" max="65535" step="1" value={port} onChange={(event) => setPort(event.target.value)} placeholder="Ex.: 443" aria-invalid={Boolean(port && !validPort)} /><small>Uma porta por vez, entre 1 e 65.535.</small></label>
+    </div>
+    {copyError && <div className="notice error-notice powershell-copy-error" role="alert">{copyError}</div>}
+    <div className="powershell-command-list">{commands.map((item) => <article className="powershell-command-card" key={item.id}>
+      <div className="powershell-command-description"><span className="powershell-command-icon"><Terminal size={16} /></span><span><b>{item.title}</b><small>{item.description}</small></span></div>
+      <pre><code>{item.command}</code></pre>
+      <button className="button outline" type="button" disabled={!item.enabled} onClick={() => void copyCommand(item.id, item.command)}>{copiedCommand === item.id ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar comando</>}</button>
+    </article>)}</div>
   </section>;
 }
 
